@@ -1,3 +1,8 @@
+"""
+To compare a template with a video stream in real-time and display the results of this comparison directly on the video stream screen.
+Сравнение шаблона с видеопотоком в реальном времени и отображение результатов этого сравнения прямо на экране видеопотока
+"""
+
 import cv2
 import numpy as np
 

@@ -1,0 +1,109 @@
+"""Simple HTTP/HTTPS Proxy Server
+This repository contains a simple HTTP/HTTPS proxy server written in Python. It allows you to forward HTTP and HTTPS requests from a client to a web server and back. The proxy server listens on a specified port and can handle multiple client connections.
+
+Installation
+To run the script on my iPhone, I use Carnets - Jupyter. The script helps me bypass the restrictions set by my provider on hotspot sharing.
+
+Features
+Supports both HTTP and HTTPS requests.
+Forwards requests from clients to web servers.
+Handles multiple client connections simultaneously.
+Requirements
+Python 3.x
+
+Example: Configuring the Proxy in Google Chrome on Windows
+Open Chrome and go to Settings.
+Scroll down and click on "Advanced".
+Under the "System" section, click "Open your computer's proxy settings".
+In the Proxy settings, enable "Use a proxy server".
+Enter the IP address of your iPhone in the "Address" field.
+Enter 8080 in the "Port" field.
+Click "Save".
+Example: Using curl to Test the Proxy Server
+curl -x http://<IPHONE_IP_ADDRESS>:8080 http://example.com
+Replace <IPHONE_IP_ADDRESS> with the actual IP address of your iPhone.
+"""
+
+import socket
+import threading
+import select
+
+# Proxy Server Configuration
+LISTEN_HOST = '0.0.0.0'
+LISTEN_PORT = 8080
+BUFFER_SIZE = 4096
+
+class ProxyServer(threading.Thread):
+    def __init__(self, client_socket):
+        threading.Thread.__init__(self)
+        self.client_socket = client_socket
+
+    def run(self):
+        request = self.client_socket.recv(BUFFER_SIZE)
+
+        # Parse the first line of the request
+        first_line = request.split(b'\n')[0]
+        url = first_line.split(b' ')[1]
+
+        # Extract the hostname
+        http_pos = url.find(b'://')  # Find position of ://
+        if http_pos == -1:
+            temp = url
+        else:
+            temp = url[(http_pos + 3):]  # Get the rest of the URL
+
+        port_pos = temp.find(b':')  # Find the port if specified
+        webserver_pos = temp.find(b'/')  # Find the end of the web server address
+
+        if webserver_pos == -1:
+            webserver_pos = len(temp)
+
+        webserver = ''
+        port = -1
+        if (port_pos == -1 or webserver_pos < port_pos):  # Default port
+            port = 80
+            webserver = temp[:webserver_pos]
+        else:  # Specific port
+            port = int(temp[(port_pos + 1):][:webserver_pos - port_pos - 1])
+            webserver = temp[:port_pos]
+
+        try:
+            # Create a socket to connect to the web server
+            webserver_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            webserver_socket.connect((webserver, port))
+
+            # Forward the request to the web server
+            webserver_socket.send(request)
+
+            while True:
+                # Receive data from the web server
+                data = webserver_socket.recv(BUFFER_SIZE)
+                if len(data) > 0:
+                    # Send the data to the client
+                    self.client_socket.send(data)
+                else:
+                    break
+
+            webserver_socket.close()
+            self.client_socket.close()
+        except socket.error as e:
+            if webserver_socket:
+                webserver_socket.close()
+            if self.client_socket:
+                self.client_socket.close()
+            print(e)
+            return
+
+def start_proxy_server():
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((LISTEN_HOST, LISTEN_PORT))
+    server_socket.listen(5)
+    print(f"Proxy server listening on port {LISTEN_PORT}")
+
+    while True:
+        client_socket, addr = server_socket.accept()
+        proxy_thread = ProxyServer(client_socket)
+        proxy_thread.start()
+
+if __name__ == "__main__":
+    start_proxy_server()
